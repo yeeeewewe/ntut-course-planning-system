@@ -147,3 +147,54 @@ def delete_course(courses, course_id, students) -> bool:
 
     del courses[course_id]
     return True
+
+
+def search_course(
+    courses, students, *, course_id=None, teacher=None, day=None,
+    required=None, min_remaining=None,
+) -> list[dict]:
+    """以 AND 組合條件查詢，依課程 id 字串排序並回傳獨立資料。
+
+    兩集合須符合資料模型，students 須包含完整有效選課現況。
+    None 略過條件；非法查詢參數拋出 ValueError，無結果回傳 []。
+    剩餘名額由學生選課資料計算，所有輸入維持不變。
+    """
+    if not isinstance(courses, dict) or not isinstance(students, dict):
+        raise ValueError("courses 與 students 必須是 dict")
+
+    for field, value in (("course_id", course_id), ("teacher", teacher)):
+        if value is not None:
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field} 必須是非空白 str 或 None")
+
+    if day is not None:
+        if type(day) is not int or not 1 <= day <= 7:
+            raise ValueError("day 必須是 1～7 的 int 或 None，不接受 bool")
+    if required is not None and type(required) is not bool:
+        raise ValueError("required 必須是 bool 或 None")
+    if min_remaining is not None:
+        if type(min_remaining) is not int or min_remaining < 0:
+            raise ValueError("min_remaining 必須是非負 int 或 None，不接受 bool")
+
+    results = []
+    for course in courses.values():
+        if course_id is not None and course["id"] != course_id:
+            continue
+        if teacher is not None and course["teacher"] != teacher:
+            continue
+        if day is not None and not any(slot[0] == day for slot in course["schedule"]):
+            continue
+        if required is not None and course["required"] != required:
+            continue
+        if min_remaining is not None:
+            enrolled_count = sum(
+                1 for student in students.values()
+                if course["id"] in student["enrolled_courses"]
+            )
+            if course["capacity"] - enrolled_count < min_remaining:
+                continue
+
+        results.append(_deepcopy(course))
+
+    results.sort(key=lambda course: course["id"])
+    return results
