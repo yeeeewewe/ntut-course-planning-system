@@ -1,4 +1,4 @@
-"""F1 課程資料驗證與新增。
+"""F1 課程資料管理核心函式。
 
 資料格式與對外契約分別見 data_model.docx、function_interface.docx。
 教室存在性與跨模組可行性由呼叫端確認；本模組不讀寫 JSON。
@@ -80,4 +80,70 @@ def add_course(courses, new_course) -> bool:
 
     stored_course = _deepcopy(new_course)
     courses[course_id] = stored_course
+    return True
+
+
+def update_course(courses, course_id, changes) -> bool:
+    """部分更新指定課程，成功為 True，一般失敗為 False。
+
+    拒絕空 changes 及任何 id 欄位；保留未指定欄位，驗證候選完整
+    課程後才寫入。教室與跨模組檢查由呼叫端負責，失敗時輸入不變。
+    """
+    if not isinstance(courses, dict):
+        return False
+    if not isinstance(course_id, str) or not course_id.strip():
+        return False
+    if not isinstance(changes, dict) or not changes or "id" in changes:
+        return False
+    if course_id not in courses:
+        return False
+
+    existing_course = courses[course_id]
+    if not isinstance(existing_course, dict):
+        return False
+
+    candidate = existing_course.copy()
+    candidate.update(changes)
+    if not validate_course(candidate) or candidate["id"] != course_id:
+        return False
+
+    stored_course = _deepcopy(candidate)
+    courses[course_id] = stored_course
+    return True
+
+
+def can_delete_course(courses, course_id, students) -> bool:
+    """課程存在且沒有學生選修時回傳 True，所有輸入維持不變。
+
+    呼叫端須提供完整且符合資料模型的選課現況；本函式不執行退選、
+    課程取消或刪除，也不保留檢查結果供後續刪除沿用。
+    """
+    if not isinstance(courses, dict) or not isinstance(students, dict):
+        return False
+    if not isinstance(course_id, str) or not course_id.strip():
+        return False
+    if course_id not in courses:
+        return False
+
+    for student in students.values():
+        if not isinstance(student, dict):
+            return False
+        enrolled_courses = student.get("enrolled_courses")
+        if not isinstance(enrolled_courses, list):
+            return False
+        if course_id in enrolled_courses:
+            return False
+
+    return True
+
+
+def delete_course(courses, course_id, students) -> bool:
+    """重新檢查刪除限制，成功刪除為 True，否則 False 且資料不變。
+
+    不沿用先前的檢查結果；仍有學生選修時拒絕刪除，不修改學生資料。
+    """
+    if not can_delete_course(courses, course_id, students):
+        return False
+
+    del courses[course_id]
     return True
