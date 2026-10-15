@@ -1,1 +1,0 @@
-print("NTUT course planning system")
