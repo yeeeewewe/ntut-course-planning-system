@@ -1,7 +1,7 @@
 from course.py import validate_course
-def getRoom():
-    Room = [[0] * 7 for k in range(12)]    # 12列7行的二維陣列(空課表)
-    return Room
+def getcurriculum():
+    curriculum = [[0] * 7 for k in range(12)]    # 12列7行的二維陣列(空課表)
+    return curriculum
 def getL(schedule):
     L=len(schedule)
     return L
@@ -14,7 +14,7 @@ def getindex(schedule,k):
         index_S=Section.index(schedule[i][1])
         return i,index_D,index_S
 def getRoom_curriculum(id, schedule):
-    curriculum=getRoom()
+    curriculum=getcurriculum()
     L=getL(schedule)
     k=0
     for i in range(L):
