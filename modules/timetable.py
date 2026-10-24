@@ -1,6 +1,6 @@
-"""F3 純課程建表與格子查詢的私人輔助邏輯。
+"""F3 建表、格子查詢與統計的私人輔助邏輯。
 
-建立課程格子與學分資料，查詢既有占用；不整合活動原始資料或提供公開入口。
+建立課程格子，查詢既有占用與空閒，並計算統計；不整合活動原始資料或提供公開入口。
 所有輸入維持不變，回傳資料獨立建立。
 """
 
@@ -86,34 +86,13 @@ def _build_course_timetable(courses, course_ids) -> dict:
     return {"grid": grid, "course_credits": course_credits}
 
 
-def _query_timetable_grid(
-    grid, *, day=None, period=None, course_id=None,
-) -> list[dict]:
-    """依 AND 條件查詢既有格子，回傳獨立的非空格紀錄。
-
-    先驗證全部格子；活動只查詢 kind、id、name 標籤。
-    None 表示不篩選，course_id 只匹配課程占用。
-    """
+def _validate_timetable_grid(grid) -> None:
+    """驗證全部七乘十二格及占用標籤，不修改輸入。"""
     if grid is None:
         raise ValueError("MISSING_DATA: grid 必須明確提供")
     if not isinstance(grid, list) or len(grid) != 7:
         raise ValueError("INVALID_INPUT: grid 必須是七列的 list")
-    if day is not None and (type(day) is not int or not 1 <= day <= 7):
-        raise ValueError("INVALID_INPUT: day 必須是 1～7 的 int 或 None，不接受 bool")
-    if period is not None:
-        valid_period = (
-            type(period) is int and 1 <= period <= 9
-        ) or (
-            isinstance(period, str) and period in ("a", "b", "c")
-        )
-        if not valid_period:
-            raise ValueError("INVALID_INPUT: period 必須是 1～9 的 int、a、b、c 或 None")
-    if course_id is not None and (
-        not isinstance(course_id, str) or not course_id.strip()
-    ):
-        raise ValueError("INVALID_INPUT: course_id 必須是非空白 str 或 None")
 
-    # 驗證整張 grid，不因查詢條件而略過非法占用。
     for row in grid:
         if not isinstance(row, list) or len(row) != 12:
             raise ValueError("INVALID_INPUT: grid 每列必須是十二格的 list")
@@ -137,6 +116,31 @@ def _query_timetable_grid(
                 if source in seen_sources:
                     raise ValueError("INVALID_INPUT: 同格不得重複相同 kind 與 id 的占用")
                 seen_sources.append(source)
+
+
+def _query_timetable_grid(
+    grid, *, day=None, period=None, course_id=None,
+) -> list[dict]:
+    """依 AND 條件查詢既有格子，回傳獨立的非空格紀錄。
+
+    先驗證全部格子；活動只查詢 kind、id、name 標籤。
+    None 表示不篩選，course_id 只匹配課程占用。
+    """
+    _validate_timetable_grid(grid)
+    if day is not None and (type(day) is not int or not 1 <= day <= 7):
+        raise ValueError("INVALID_INPUT: day 必須是 1～7 的 int 或 None，不接受 bool")
+    if period is not None:
+        valid_period = (
+            type(period) is int and 1 <= period <= 9
+        ) or (
+            isinstance(period, str) and period in ("a", "b", "c")
+        )
+        if not valid_period:
+            raise ValueError("INVALID_INPUT: period 必須是 1～9 的 int、a、b、c 或 None")
+    if course_id is not None and (
+        not isinstance(course_id, str) or not course_id.strip()
+    ):
+        raise ValueError("INVALID_INPUT: course_id 必須是非空白 str 或 None")
 
     results = []
     period_order = [1, 2, 3, 4, 5, 6, 7, 8, 9, "a", "b", "c"]
@@ -169,3 +173,122 @@ def _query_timetable_grid(
                     "items": items,
                 })
     return results
+
+
+def _find_free_grid_periods(grid, *, start, end, min_periods=3) -> list[dict]:
+    """列出含兩端的查詢範圍內，各日符合長度的最大空閒區段。"""
+    if grid is None or start is None or end is None:
+        raise ValueError("MISSING_DATA: grid、start 與 end 必須明確提供")
+    _validate_timetable_grid(grid)
+    if type(min_periods) is not int or min_periods < 1:
+        raise ValueError("INVALID_INPUT: min_periods 必須是正整數，不接受 bool")
+
+    period_order = [1, 2, 3, 4, 5, 6, 7, 8, 9, "a", "b", "c"]
+    for slot in [start, end]:
+        if not isinstance(slot, list) or len(slot) != 2:
+            raise ValueError("INVALID_INPUT: start 與 end 必須是 [day, period] 的 list")
+        day, period = slot
+        if type(day) is not int or not 1 <= day <= 7:
+            raise ValueError("INVALID_INPUT: 端點星期必須是 1～7 的 int，不接受 bool")
+        valid_period = (
+            type(period) is int and 1 <= period <= 9
+        ) or (
+            isinstance(period, str) and period in ("a", "b", "c")
+        )
+        if not valid_period:
+            raise ValueError("INVALID_INPUT: 端點節次必須是 1～9 的 int 或 a、b、c")
+
+    start_day, start_period = start
+    end_day, end_period = end
+    start_index = period_order.index(start_period)
+    end_index = period_order.index(end_period)
+    if start_day > end_day or (start_day == end_day and start_index > end_index):
+        raise ValueError("INVALID_INPUT: start 不得晚於 end")
+
+    results = []
+    for day_index in range(start_day - 1, end_day):
+        first_period = 0
+        last_period = 11
+        if day_index == start_day - 1:
+            first_period = start_index
+        if day_index == end_day - 1:
+            last_period = end_index
+
+        free_periods = []
+        for period_index in range(first_period, last_period + 1):
+            if not grid[day_index][period_index]:
+                free_periods.append(period_order[period_index])
+            else:
+                if len(free_periods) >= min_periods:
+                    results.append({"day": day_index + 1, "periods": free_periods})
+                free_periods = []
+        # 當日或查詢範圍末端也可能仍在空閒區段中。
+        if len(free_periods) >= min_periods:
+            results.append({"day": day_index + 1, "periods": free_periods})
+    return results
+
+
+def _summarize_timetable_grid(grid, course_credits) -> dict:
+    """統計上課格數、每週學分、首末占用間空堂及全部空白格數。"""
+    if grid is None or course_credits is None:
+        raise ValueError("MISSING_DATA: grid 與 course_credits 必須明確提供")
+    _validate_timetable_grid(grid)
+    if not isinstance(course_credits, dict):
+        raise ValueError("INVALID_INPUT: course_credits 必須是 dict")
+
+    weekly_credits = 0
+    for course_id, credits in course_credits.items():
+        if not isinstance(course_id, str) or not course_id.strip():
+            raise ValueError("INVALID_INPUT: 學分對照的課程代號必須是非空白 str")
+        if type(credits) is not int or credits < 1:
+            raise ValueError("INVALID_INPUT: 課程學分必須是正整數，不接受 bool")
+        weekly_credits += credits
+
+    grid_course_ids = []
+    daily_class_periods = []
+    daily_gaps = []
+    empty_periods = 0
+    for row in grid:
+        class_periods = 0
+        first_occupied = None
+        last_occupied = None
+        for period_index in range(12):
+            cell = row[period_index]
+            if not cell:
+                empty_periods += 1
+                continue
+            if first_occupied is None:
+                first_occupied = period_index
+            last_occupied = period_index
+
+            has_course = False
+            for item in cell:
+                if item["kind"] == "course":
+                    has_course = True
+                    if item["id"] not in grid_course_ids:
+                        grid_course_ids.append(item["id"])
+            if has_course:
+                class_periods += 1
+
+        gaps = 0
+        if first_occupied is not None:
+            for period_index in range(first_occupied + 1, last_occupied):
+                if not row[period_index]:
+                    gaps += 1
+        daily_class_periods.append(class_periods)
+        daily_gaps.append(gaps)
+
+    # 學分對照須恰好涵蓋所有不同課程，活動不需要學分。
+    if len(course_credits) != len(grid_course_ids):
+        raise ValueError("INVALID_INPUT: course_credits 必須與 grid 的課程代號一致")
+    for course_id in grid_course_ids:
+        if course_id not in course_credits:
+            raise ValueError("INVALID_INPUT: course_credits 必須與 grid 的課程代號一致")
+
+    return {
+        "daily_class_periods": daily_class_periods,
+        "weekly_credits": weekly_credits,
+        "daily_gaps": daily_gaps,
+        "total_gaps": sum(daily_gaps),
+        "empty_periods": empty_periods,
+    }
