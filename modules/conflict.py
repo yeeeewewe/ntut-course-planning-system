@@ -1,7 +1,7 @@
-"""F2 純課程時間衝突的私人輔助邏輯。
+"""F2 純課程時間、候選學分與名額的私人輔助邏輯。
 
-沿用 F1 課程與 schedule，所有輸入維持不變。
-尚未提供完整 F2 公開入口；不處理活動、學分或名額。
+沿用 F1 課程與學生資料，所有輸入維持不變。
+尚未提供完整 F2 公開入口；不處理活動。
 """
 
 
@@ -127,3 +127,109 @@ def _find_course_room_conflicts(courses) -> list[dict]:
         issue["room"] = room
         results.append(issue)
     return results
+
+
+def _check_student_credit_capacity(
+    courses, students, candidate_student, *, existing_student_id=None,
+) -> dict:
+    """計算候選學生的 credits 與學分、課程名額 issues，不修改輸入。
+
+    資料須遵照 F1；此處只驗證本次計算依賴的欄位。
+    existing_student_id=None 為新增，否則以候選完整選課取代原學生。
+    """
+    if courses is None or students is None or candidate_student is None:
+        raise ValueError("MISSING_DATA: courses、students 與 candidate_student 必須明確提供")
+    if (
+        not isinstance(courses, dict)
+        or not isinstance(students, dict)
+        or not isinstance(candidate_student, dict)
+    ):
+        raise ValueError("INVALID_INPUT: courses、students 與 candidate_student 必須是 dict")
+
+    candidate_id = candidate_student.get("id")
+    if not isinstance(candidate_id, str) or not candidate_id.strip():
+        raise ValueError("INVALID_INPUT: 候選學生 id 必須是非空白 str")
+    credit_limit = candidate_student.get("credit_limit")
+    if type(credit_limit) is not int or credit_limit < 1:
+        raise ValueError("INVALID_INPUT: credit_limit 必須是正整數，不接受 bool")
+
+    if existing_student_id is None:
+        if candidate_id in students:
+            raise ValueError("INVALID_INPUT: 新增學生的 id 不得已存在")
+    else:
+        if not isinstance(existing_student_id, str) or not existing_student_id.strip():
+            raise ValueError("INVALID_INPUT: existing_student_id 必須是非空白 str 或 None")
+        if existing_student_id != candidate_id:
+            raise ValueError("INVALID_INPUT: 修改學生不得變更 id")
+        if existing_student_id not in students:
+            raise ValueError("INVALID_INPUT: 原學生必須存在")
+
+    # 現有人數與候選學分都依賴有效且不重複的選課參照。
+    student_records = list(students.items())
+    student_records.append((candidate_id, candidate_student))
+    for student_id, student in student_records:
+        if not isinstance(student_id, str) or not student_id.strip():
+            raise ValueError("INVALID_INPUT: 學生集合鍵必須是非空白 str")
+        if not isinstance(student, dict) or student.get("id") != student_id:
+            raise ValueError("INVALID_INPUT: 學生必須是 dict，且 id 與集合鍵一致")
+        enrolled_courses = student.get("enrolled_courses")
+        if not isinstance(enrolled_courses, list):
+            raise ValueError("INVALID_INPUT: enrolled_courses 必須是 list")
+        seen_course_ids = []
+        for course_id in enrolled_courses:
+            if not isinstance(course_id, str) or not course_id.strip():
+                raise ValueError("INVALID_INPUT: 選課代號必須是非空白 str")
+            if course_id in seen_course_ids:
+                raise ValueError("INVALID_INPUT: enrolled_courses 不得重複課程代號")
+            if course_id not in courses:
+                raise ValueError("INVALID_INPUT: 選課代號必須參照 courses 中的課程")
+            course = courses[course_id]
+            if not isinstance(course, dict) or course.get("id") != course_id:
+                raise ValueError("INVALID_INPUT: 課程必須是 dict，且 id 與集合鍵一致")
+            seen_course_ids.append(course_id)
+
+    before = 0
+    if existing_student_id is not None:
+        for course_id in students[existing_student_id]["enrolled_courses"]:
+            credits = courses[course_id].get("credits")
+            if type(credits) is not int or credits < 1:
+                raise ValueError("INVALID_INPUT: 課程 credits 必須是正整數，不接受 bool")
+            before += credits
+
+    candidate_course_ids = candidate_student["enrolled_courses"]
+    after = 0
+    for course_id in candidate_course_ids:
+        credits = courses[course_id].get("credits")
+        capacity = courses[course_id].get("capacity")
+        if type(credits) is not int or credits < 1:
+            raise ValueError("INVALID_INPUT: 課程 credits 必須是正整數，不接受 bool")
+        if type(capacity) is not int or capacity < 1:
+            raise ValueError("INVALID_INPUT: 課程 capacity 必須是正整數，不接受 bool")
+        after += credits
+
+    issues = []
+    if after > credit_limit:
+        issues.append({"type": "credit_limit"})
+
+    # 先排除原學生，再加入候選學生一次，保留原課時不會重複計人。
+    for course_id in sorted(candidate_course_ids):
+        enrolled = 0
+        for student_id, student in students.items():
+            if student_id == existing_student_id:
+                continue
+            if course_id in student["enrolled_courses"]:
+                enrolled += 1
+        enrolled += 1
+        capacity = courses[course_id]["capacity"]
+        if enrolled > capacity:
+            issues.append({
+                "type": "capacity",
+                "course_id": course_id,
+                "enrolled": enrolled,
+                "capacity": capacity,
+            })
+
+    return {
+        "credits": {"before": before, "after": after, "limit": credit_limit},
+        "issues": issues,
+    }
