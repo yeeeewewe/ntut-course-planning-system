@@ -1,1 +1,28 @@
-{}
+{
+  "S001": {
+    "id": "S001",
+    "name": "陳小明",
+    "department": "資工一",
+    "enrolled_courses": [
+      "CS101",
+      "MA101"
+    ],
+    "credit_limit": 24
+  },
+  "S002": {
+    "id": "S002",
+    "name": "林小華",
+    "department": "資工二",
+    "enrolled_courses": [
+      "CS102"
+    ],
+    "credit_limit": 21
+  },
+  "S003": {
+    "id": "S003",
+    "name": "王小美",
+    "department": "電機一",
+    "enrolled_courses": [],
+    "credit_limit": 18
+  }
+}

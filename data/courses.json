@@ -1,1 +1,97 @@
-{}
+{
+  "CS101": {
+    "id": "CS101",
+    "name": "Python 程式設計",
+    "credits": 3,
+    "required": true,
+    "teacher": "王老師",
+    "capacity": 50,
+    "room": "教室A",
+    "schedule": [
+      [
+        1,
+        1
+      ],
+      [
+        1,
+        2
+      ]
+    ]
+  },
+  "CS102": {
+    "id": "CS102",
+    "name": "資料結構",
+    "credits": 3,
+    "required": true,
+    "teacher": "林老師",
+    "capacity": 45,
+    "room": "教室B",
+    "schedule": [
+      [
+        2,
+        3
+      ],
+      [
+        2,
+        4
+      ]
+    ]
+  },
+  "CS201": {
+    "id": "CS201",
+    "name": "資料庫系統",
+    "credits": 3,
+    "required": false,
+    "teacher": "陳老師",
+    "capacity": 40,
+    "room": "教室C",
+    "schedule": [
+      [
+        3,
+        5
+      ],
+      [
+        3,
+        6
+      ]
+    ]
+  },
+  "GE101": {
+    "id": "GE101",
+    "name": "通識英文",
+    "credits": 2,
+    "required": false,
+    "teacher": "張老師",
+    "capacity": 60,
+    "room": "教室D",
+    "schedule": [
+      [
+        4,
+        "a"
+      ],
+      [
+        4,
+        "b"
+      ]
+    ]
+  },
+  "MA101": {
+    "id": "MA101",
+    "name": "微積分",
+    "credits": 4,
+    "required": true,
+    "teacher": "王老師",
+    "capacity": 55,
+    "room": "教室A",
+    "schedule": [
+      [
+        2,
+        1
+      ],
+      [
+        2,
+        2
+      ]
+    ]
+  }
+}
