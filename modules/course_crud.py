@@ -1,11 +1,11 @@
 import json
 from pathlib import Path
 
-from course import add_course, delete_course, search_course, update_course
+from .course import add_course, delete_course, search_course, update_course
 
 
 def read_json(filename):
-    with Path(__file__).with_name(filename).open(encoding="utf-8") as file:
+    with (Path(__file__).resolve().parent.parent / "data" / filename).open(encoding="utf-8") as file:
         data = json.load(file)
     if not isinstance(data, dict):
         raise ValueError(f"{filename} 必須是 JSON 物件")
@@ -43,7 +43,24 @@ def check_course_room(course):
         raise ValueError("教室不存在，請使用 classrooms.json 中的教室代碼")
 
 
-def course_action(choice, courses, read_input):
+def display_course(course):
+    weekdays = "一二三四五六日"
+    schedule = "、".join(
+        f"星期{weekdays[day - 1]} 第{period}節"
+        for day, period in course["schedule"]
+    )
+    print("------------------------------------------------")
+    print(f"課程代碼：{course['id']}")
+    print(f"課程名稱：{course['name']}")
+    print(f"學分數：{course['credits']}")
+    print(f"課程類別：{'必修' if course['required'] else '選修'}")
+    print(f"授課教師：{course['teacher']}")
+    print(f"人數上限：{course['capacity']}")
+    print(f"上課教室：{course['room']}")
+    print(f"上課時段：{schedule}")
+
+
+def course_action(choice, courses, read_input, *, students=None):
     if choice == "1":
         course_id = read_input("課程代碼：")
         new_course = input_course_fields(read_input)
@@ -54,9 +71,31 @@ def course_action(choice, courses, read_input):
         print("新增成功！")
     elif choice == "2":
         course_id = read_input("要刪除的課程代碼：")
-        students = read_json("students.json")
+        if not isinstance(course_id, str) or not course_id.strip():
+            raise ValueError("課程代碼不可為空白")
+        if course_id not in courses:
+            raise ValueError(f"課程 {course_id} 不存在")
+        print("要刪除的課程資料：")
+        display_course(courses[course_id])
+        if students is None:
+            students = read_json("students.json")
+        if not isinstance(students, dict):
+            raise ValueError("學生資料不合法：學生集合必須是 dict")
+        enrolled_students = []
+        for student_id, student in students.items():
+            if not isinstance(student, dict):
+                raise ValueError(f"學生 {student_id} 資料不合法：學生紀錄必須是 dict")
+            if not isinstance(student.get("enrolled_courses"), list):
+                raise ValueError(f"學生 {student_id} 資料不合法：已選課程必須是 list")
+            if course_id in student["enrolled_courses"]:
+                enrolled_students.append(str(student_id))
+        if enrolled_students:
+            raise ValueError(
+                f"課程 {course_id} 仍有 {len(enrolled_students)} 位學生選修"
+                f"（學號：{'、'.join(enrolled_students)}），無法刪除"
+            )
         if not delete_course(courses, course_id, students):
-            raise ValueError("刪除失敗：課程不存在、仍有學生選修或學生資料不合法")
+            raise ValueError(f"課程 {course_id} 刪除檢查未通過")
         print("刪除成功！")
     elif choice == "3":
         course_id = read_input("要修改的課程代碼：")
@@ -72,11 +111,12 @@ def course_action(choice, courses, read_input):
         course_id = read_input("課程代碼（留空查詢全部）：")
         if course_id == "":
             course_id = None
-        students = read_json("students.json")
+        if students is None:
+            students = read_json("students.json")
         results = search_course(courses, students, course_id=course_id)
         if not results:
             print("查無符合條件的課程。")
         for course in results:
-            print(json.dumps(course, ensure_ascii=False, indent=2))
+            display_course(course)
 
 
