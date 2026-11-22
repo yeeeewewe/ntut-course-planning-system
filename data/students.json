@@ -5,7 +5,8 @@
     "department": "資工一",
     "enrolled_courses": [
       "CS101",
-      "MA101"
+      "MA101",
+      "GE101"
     ],
     "credit_limit": 24
   },
